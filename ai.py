@@ -66,8 +66,12 @@ class Dino:
         self.rect.y = self.y
         self.step_index += 1
 
-    def draw(self, win):
+    def draw(self, win, obstacles):
         win.blit(self.image, (self.rect.x, self.rect.y))
+        pygame.draw.rect(win, self.color, self.rect, 2)
+        for obstacle in obstacles:
+            pygame.draw.line(win, self.color, (self.rect.x+self.rect.width,
+                             self.rect.y), (obstacle.rect.x, obstacle.rect.height), 2)
 
 
 class Obsticle:
@@ -108,12 +112,12 @@ def draw(win, dinos, obs, background, score, gen):
     background.draw(win)
     text = FONT.render(f'score:  {str(int(score))}', True, (0, 0, 0))
     win.blit(text, (1300, 50))
-    text = FONT.render(f'gen:  {str(int(gen))}', True, (0, 0, 0))
+    text = FONT.render(f'gen:  {str(int(gen)+1)}', True, (0, 0, 0))
     win.blit(text, (1300, 70))
     for o in obs:
         o.draw(win)
     for dino in dinos:
-        dino.draw(win)
+        dino.draw(win, obs)
     pygame.display.update()
 
 
@@ -126,7 +130,7 @@ def distance(pos_a, pos_b):
 def main(genomes, config):
     clock = pygame.time.Clock()
 
-    FPS = 60
+    FPS = 100
     running = True
 
     score = 0
@@ -154,6 +158,7 @@ def main(genomes, config):
             if obs[x].x < 0:
                 obs.pop(x)
                 obs.append(Obsticle())
+                obs[1].x += random.randint(0, 300)
             obs[x].update()
         score += 0.05
         if len(dinos) == 0:
