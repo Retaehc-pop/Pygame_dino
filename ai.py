@@ -1,5 +1,7 @@
 import pygame
+import neat
 import random
+import math
 import os
 
 pygame.init()
@@ -75,6 +77,7 @@ class Obsticle:
         self.image = random.choice(CACTUS)
         self.size = self.image.get_size()
         self.x = WIDTH
+        self.rect = pygame.Rect(0, 0, 0, 0)
         self.rect = pygame.Rect(self.x, self.y, self.x, self.y-self.size[1])
 
     def update(self):
@@ -100,64 +103,94 @@ class BG:
         win.blit(ground, (WIDTH + self.ground_x, self.ground_y))
 
 
-def draw(win, dino, obs, background, score, game_end):
+def draw(win, dinos, obs, background, score, gen):
     win.fill((255, 255, 255))
     background.draw(win)
     text = FONT.render(f'score:  {str(int(score))}', True, (0, 0, 0))
-    win.blit(text, (1400, 50))
-    if game_end:
-        gameover = FONT.render(f'restart? press spacebar', True, (0, 0, 0))
-        win.blit(gameover, (WIDTH//2, HEIGHT//2))
+    win.blit(text, (1300, 50))
+    text = FONT.render(f'gen:  {str(int(gen))}', True, (0, 0, 0))
+    win.blit(text, (1300, 70))
     for o in obs:
         o.draw(win)
-    dino.draw(win)
+    for dino in dinos:
+        dino.draw(win)
     pygame.display.update()
 
 
-def main():
+def distance(pos_a, pos_b):
+    dx = pos_a[0]-pos_b[0]
+    dy = pos_a[1]-pos_b[1]
+    return math.sqrt(dx**2+dy**2)
+
+
+def main(genomes, config):
     clock = pygame.time.Clock()
 
     FPS = 60
     running = True
-    game_end = False
-    dino = Dino()
+
     score = 0
     background = BG()
     obs = [Obsticle(), Obsticle()]
     obs[1].x += WIDTH//2
+
+    ge = []
+    nets = []
+    dinos = []
+    for genome_id, genome in genomes:
+        dinos.append(Dino())
+        ge.append(genome)
+        genome.fitness = 0
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        nets.append(net)
+
     while running:
         clock.tick(FPS)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-        keys = pygame.key.get_pressed()
-        if not game_end:
-            if keys[pygame.K_SPACE] == 1:
-                dino.dino_jump = True
-            score += 0.05
-            for x in range(len(obs)):
-                if obs[x].x < 0:
-                    obs.pop(x)
-                    obs.append(Obsticle())
-                obs[x].update()
-            if dino.rect.colliderect(obs[0].rect):
-                game_end = True
-            if score % 100 == 0:
-                FPS += 1
+                pygame.quit()
+        for x in range(len(obs)):
+            if obs[x].x < 0:
+                obs.pop(x)
+                obs.append(Obsticle())
+            obs[x].update()
+        score += 0.05
+        if len(dinos) == 0:
+            break
+        for i, dino in enumerate(dinos):
+            output = nets[i].activate((dino.rect.y, distance(
+                (dino.rect.x, dino.rect.y), obs[0].rect.midtop)))
             dino.update()
-            background.update()
-        else:
-            if keys[pygame.K_SPACE] == 1:
-                game_end = False
-                dino = Dino()
-                background = BG()
-                obs = [Obsticle(), Obsticle()]
-                obs[1].x += WIDTH//2
-                FPS = 60
-                score = 0
+            ge[i].fitness += 0.05
+            if output[0] > 0.5 and dino.rect.y == dino.y:
+                dino.dino_jump = True
+            if dino.rect.colliderect(obs[0].rect):
+                ge[i].fitness -= 1
+                dinos.pop(i)
+                ge.pop(i)
+                nets.pop(i)
+        if score % 100 == 0:
+            FPS += 10
+        background.update()
+        draw(win, dinos, obs, background, score, pop.generation)
 
-        draw(win, dino, obs, background, score, game_end)
+
+def run(config_path):
+    global pop
+    config = neat.config.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        config_path
+    )
+
+    pop = neat.Population(config)
+    pop.run(main, 50)
 
 
 if __name__ == "__main__":
-    main()
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, 'config.txt')
+    run(config_path)
